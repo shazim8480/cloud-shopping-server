@@ -21,9 +21,61 @@ const client = new MongoClient(uri, {
 
 const run = async () => {
   try {
-    const db = client.db("rental-housing");
+    const db = client.db("cloud-shopping");
     const itemsCollection = db.collection("items");
     const userCollection = db.collection("users");
+
+    // Sign up route
+    app.post("/api/sign-up", async (req, res) => {
+      try {
+        const { name, email, password } = req.body;
+        const hashedPassword = await bcrypt.hash(password, 10); // Hashing password
+
+        // Save user to the database
+        const newUser = await userCollection.insertOne({
+          name,
+          email,
+          password: hashedPassword,
+          created_at: new Date(),
+          created_by: "System", // You can modify this as needed
+        });
+
+        res
+          .status(201)
+          .json({ message: "User created successfully", user: newUser });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Error creating user", error: error.message });
+      }
+    });
+
+    // Sign in route
+    app.post("/api/sign-in", async (req, res) => {
+      try {
+        const { email, password } = req.body;
+
+        // Find user by email in the database
+        const user = await userCollection.findOne({ email });
+
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Compare entered password with hashed password in the database
+        const passwordMatch = await bcrypt.compare(password, user.password);
+
+        if (!passwordMatch) {
+          return res.status(401).json({ message: "Invalid password" });
+        }
+
+        res.status(200).json({ message: "Logged in successfully", user });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Error signing in", error: error.message });
+      }
+    });
   } finally {
   }
 };
