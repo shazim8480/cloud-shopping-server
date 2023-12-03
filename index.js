@@ -24,13 +24,24 @@ const client = new MongoClient(uri, {
 const run = async () => {
   try {
     const db = client.db("cloud-shopping");
-    const itemCollection = db.collection("items");
+    const productCollection = db.collection("items");
     const userCollection = db.collection("users");
+
+    // ! auth api
 
     // Sign up route
     app.post("/api/sign-up", async (req, res) => {
       try {
         const { name, email, password } = req.body;
+
+        // Check if the email already exists in the database
+        const existingUser = await userCollection.findOne({ email });
+        if (existingUser) {
+          return res
+            .status(409)
+            .json({ message: "Email already exists", status: 409 });
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10); // Hashing password
         const userId = uuidv4();
 
@@ -41,11 +52,11 @@ const run = async () => {
           email,
           password: hashedPassword,
           created_at: new Date(),
-          created_by: "System",
+          created_by: "System", // You can modify this as needed
         });
 
         const createdUser = {
-          _id: newUser.insertedId,
+          _id: newUser.insertedId, // Assuming MongoDB returns the insertedId
           id: userId,
           name,
           email,
@@ -96,6 +107,90 @@ const run = async () => {
         res
           .status(500)
           .json({ message: "Error signing in", error: error.message });
+      }
+    });
+
+    // ! product api (CRUD)
+
+    // Create a product
+    app.post("/api/add-product", async (req, res) => {
+      try {
+        const { name, price, category, created_by } = req.body;
+
+        const newProduct = {
+          id: uuidv4(),
+          name,
+          price,
+          category,
+          created_at: new Date(),
+          created_by,
+        };
+
+        const insertedProduct = await productCollection.insertOne(newProduct);
+
+        res.status(201).json({
+          message: "Product created successfully",
+          product: newProduct,
+          status: 201,
+        });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Error creating product", error: error.message });
+      }
+    });
+
+    // Get all products
+    app.get("/api/products", async (req, res) => {
+      try {
+        const products = await productCollection.find({}).toArray();
+
+        res.status(200).json({ products, status: 200 });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Error fetching products", error: error.message });
+      }
+    });
+
+    // Update a product by ID
+    app.put("/api/product/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { name } = req.body;
+
+        const updatedProduct = await productCollection.findOneAndUpdate(
+          { id },
+          { $set: { name } },
+          { returnOriginal: false }
+        );
+
+        res.status(200).json({
+          message: "Product updated successfully",
+          product: updatedProduct.value,
+          status: 200,
+        });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Error updating product", error: error.message });
+      }
+    });
+
+    // Delete a product by ID
+    app.delete("/api/product/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        await productCollection.deleteOne({ id });
+
+        res
+          .status(200)
+          .json({ message: "Product deleted successfully", status: 200 });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: "Error deleting product", error: error.message });
       }
     });
   } finally {
