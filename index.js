@@ -1,6 +1,8 @@
 require("dotenv").config();
 const express = require("express");
 const bcrypt = require("bcrypt");
+const { v4: uuidv4 } = require("uuid");
+
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
@@ -22,7 +24,7 @@ const client = new MongoClient(uri, {
 const run = async () => {
   try {
     const db = client.db("cloud-shopping");
-    const itemsCollection = db.collection("items");
+    const itemCollection = db.collection("items");
     const userCollection = db.collection("users");
 
     // Sign up route
@@ -30,19 +32,32 @@ const run = async () => {
       try {
         const { name, email, password } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10); // Hashing password
+        const userId = uuidv4();
 
         // Save user to the database
         const newUser = await userCollection.insertOne({
+          id: userId,
           name,
           email,
           password: hashedPassword,
           created_at: new Date(),
-          created_by: "System", // You can modify this as needed
+          created_by: "System",
         });
 
-        res
-          .status(201)
-          .json({ message: "User created successfully", user: newUser });
+        const createdUser = {
+          _id: newUser.insertedId,
+          id: userId,
+          name,
+          email,
+          created_at: new Date(),
+          created_by: "System",
+        };
+
+        res.status(201).json({
+          message: "Account created successfully",
+          user: createdUser,
+          status: 200,
+        });
       } catch (error) {
         res
           .status(500)
@@ -69,7 +84,14 @@ const run = async () => {
           return res.status(401).json({ message: "Invalid password" });
         }
 
-        res.status(200).json({ message: "Logged in successfully", user });
+        // Remove password from the user object before sending the response
+        const { password: userPassword, ...userWithoutPassword } = user;
+
+        res.status(200).json({
+          message: "Logged in successfully",
+          user: userWithoutPassword,
+          status: 200,
+        });
       } catch (error) {
         res
           .status(500)
